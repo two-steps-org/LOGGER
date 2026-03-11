@@ -33,6 +33,20 @@ pip install -e .
 
 ## 2. Elasticsearch Setup (Docker)
 
+### Create index template (for monthly logs like demo-api-03-26)
+
+For project-specific indices (e.g. `demo-api-03-26`, `benchmark-02-26`), create the template first:
+
+```bash
+# Demo app
+python scripts/create_es_template.py --prefix demo-api
+
+# Benchmark project
+python scripts/create_es_template.py --prefix benchmark
+```
+
+Then use `index_pattern="demo-api-{month}"` or `index_pattern="benchmark-{month}"` in CustomLogger.
+
 ### Start Elasticsearch
 
 ```bash
@@ -112,6 +126,21 @@ logger.info("Application started")
 logger.info("User logged in", extra={"user_id": 123})
 ```
 
+### Benchmark project (monthly indices: benchmark-03-26, benchmark-02-26)
+
+1. Create template: `python scripts/create_es_template.py --prefix benchmark`
+2. Use monthly pattern:
+
+```python
+logger = CustomLogger(
+    "benchmark",
+    index_name="benchmark",
+    index_pattern="benchmark-{month}",  # benchmark-03-26, benchmark-02-26
+    service_name="benchmark",
+    project_name="benchmark",
+)
+```
+
 
 
 ## 5. FastAPI Demo
@@ -123,6 +152,20 @@ uvicorn demo.app:app --reload
 # Test: GET /, GET /health, GET /users/1, POST /items?name=book&price=10, GET /error
 ```
 
+### Log Filtering API (index name, date, month)
+
+| Endpoint | Query Params | Description |
+|----------|--------------|-------------|
+| `GET /logs` | `index_pattern`, `from_date`, `to_date`, `year`, `month`, `severity`, `size`, `from` | Filter logs |
+| `GET /logs/indices` | `pattern` | List available indices |
+
+**Examples:**
+- `GET /logs?index_pattern=python-logs*` – all logs
+- `GET /logs?index_pattern=python-logs-2025.03.11` – specific date index
+- `GET /logs?year=2025&month=3` – March 2025
+- `GET /logs?from_date=2025-03-01&to_date=2025-03-31` – date range
+- `GET /logs?severity=ERROR` – errors only
+
 ---
 
 ## 6. Test
@@ -132,19 +175,21 @@ uvicorn demo.app:app --reload
 source .venv/bin/activate
 python test_logs.py
 
-# Or run directly: .venv/bin/python test_logs.py
+# Benchmark project test (see docs/BENCHMARK_TESTING.md)
+python test_benchmark.py
 ```
 
-Verify: http://localhost:9200/python-logs/_search?pretty
+Verify: http://localhost:9200/python-logs/_search?pretty  
+Benchmark: http://localhost:9200/benchmark-03-26/_search?pretty
 
 ---
 
 ## 7. No Results in Kibana?
 
-1. **Expand time range** – In the top-right, change "Last 15 minutes" to **"Last 24 hours"** or **"Last 7 days"** (logs may be older)
-2. **Use venv** – If stderr shows `[elastic_logger] Error: pip install elasticsearch`, run with venv: `source .venv/bin/activate`
-3. **Verify ES** – Run `python verify_es.py` to check that logs are in Elasticsearch
-4. **Data view** – Index pattern should be `python-logs*`, Timestamp field should be **@timestamp**  
+1. **Create Data View** – Stack Management → Data Views → Create. Index pattern: `demo-api*` or `benchmark*` (per project). Timestamp: **@timestamp**.
+2. **Expand time range** – Top-right: change "Last 15 minutes" to **"Last 24 hours"** or **"Last 7 days"**.
+3. **Correct index pattern** – Demo uses `demo-api-03-26`; select `demo-api*` in Discover, not `python-logs*`.
+4. **Create template first** – `python scripts/create_es_template.py --prefix demo-api`  
 
 ---
 

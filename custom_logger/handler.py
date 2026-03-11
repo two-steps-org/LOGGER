@@ -37,13 +37,18 @@ class ElasticsearchHandler(logging.Handler):
 
     def _get_index_name(self) -> str:
         p = self.config.index_pattern
+        now = datetime.now(timezone.utc)
+        if "{month}" in p:
+            # benchmark-03-26 format (MM-YY)
+            return p.replace("{month}", now.strftime("%m-%y"))
         if "{date}" in p:
-            return p.replace("{date}", datetime.now(timezone.utc).strftime("%Y.%m.%d"))
+            return p.replace("{date}", now.strftime("%Y.%m.%d"))
         return p
 
     def _build_document(self, record: logging.LogRecord) -> Dict[str, Any]:
         record.service = self.config.service_name
         record.environment = self.config.environment or "development"
+        record.project_name = self.config.project_name or self.config.service_name
         if isinstance(self.formatter, ECSFormatter):
             doc = self.formatter._record_to_client_format(record)
         else:

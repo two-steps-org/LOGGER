@@ -46,11 +46,13 @@ class ECSFormatter(logging.Formatter):
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
         svc = getattr(record, "service", "api")
         env = getattr(record, "environment", "development")
+        project = getattr(record, "project_name", None) or (svc if isinstance(svc, str) else svc.get("name", "api"))
         doc = {
             "@timestamp": ts,  # Kibana default time field
             "severity": severity,
             "message": message,
             "timestamp": ts,
+            "project": project,  # Project name - clearly visible in Kibana
             "service": {"name": svc} if isinstance(svc, str) else svc,  # ES mapping expects object
             "environment": env,
         }

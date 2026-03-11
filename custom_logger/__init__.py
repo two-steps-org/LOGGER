@@ -8,9 +8,10 @@ from typing import Dict, List, Any, Optional
 
 from .handler import ElasticsearchHandler
 from .formatter import ECSFormatter
+from .query import query_logs, list_indices
 
 __version__ = "1.0.0"
-__all__ = ["CustomLogger"]
+__all__ = ["CustomLogger", "query_logs", "list_indices"]
 
 # LogRecord reserved - cannot use in extra
 _RESERVED = {
@@ -54,7 +55,9 @@ class CustomLogger(logging.Logger):
         level: int = logging.INFO,
         elastic_hosts: Optional[List[Dict[str, Any]]] = None,
         index_name: str = "python-logs",
+        index_pattern: Optional[str] = None,
         service_name: str = "api",
+        project_name: Optional[str] = None,
         environment: str = "development",  # Required: development, staging, production
         console: bool = True,
         **kwargs,
@@ -66,11 +69,14 @@ class CustomLogger(logging.Logger):
             h.setFormatter(_ConsoleFormatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
             self.addHandler(h)
 
+        pattern = index_pattern or index_name
+        proj = project_name or service_name
         es_handler = ElasticsearchHandler(
             hosts=elastic_hosts or [{"host": "localhost", "port": 9200}],
             index_name=index_name,
-            index_pattern=index_name,
+            index_pattern=pattern,
             service_name=service_name,
+            project_name=proj,
             environment=environment,
             **kwargs,
         )
