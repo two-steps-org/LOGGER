@@ -15,6 +15,7 @@ class ElasticLoggerConfig:
     api_key: Optional[str] = None
     cloud_id: Optional[str] = None
     service_name: str = "python-app"
+    project_name: Optional[str] = None
     environment: Optional[str] = None
     flush_interval: float = 1.0
     bulk_size: int = 100
