@@ -1,207 +1,157 @@
-# Elastic Logger
+# custom_logger
 
-Python logging library that sends application logs to Elasticsearch. Uses **ECS format**. Works with Flask, Django, FastAPI, etc.
+Refactored logger library with modular package structure, monthly Elasticsearch indexing, and uv-based CI/CD publishing.
 
----
+## Target Structure (implemented in `custom_logger/`)
 
-## 1. Project Setup
-
-### Prerequisites
-- Python 3.8+
-- Docker (for Elasticsearch & Kibana)
-
-### Steps
-
-```bash
-# Clone / enter project
-cd /path/to/logger
-
-# Create virtual environment
-python -m venv .venv
-
-# Activate (Linux / Mac)
-source .venv/bin/activate
-
-# Activate (Windows PowerShell)
-# .venv\Scripts\Activate.ps1
-
-# Install library
-pip install -e .
+```text
+custom_logger/
+├── __init__.py
+├── configuration/
+│   ├── __init__.py
+│   ├── get_logger_configuration.py
+│   └── logger_configuration.py
+├── constants.py
+├── formatters/
+│   ├── __init__.py
+│   └── json_formatter.py
+├── get_logger.py
+├── github/
+│   └── workflows/
+└── handlers/
+    ├── __init__.py
+    └── elastic.handler.py
 ```
 
----
+## Usage
 
-## 2. Elasticsearch Setup (Docker)
+```python
+from custom_logger import twosteps_logger, get_additional, StatusType
 
-### Create index template (for monthly logs like demo-api-03-26)
+logger = twosteps_logger(__name__)
 
-For project-specific indices (e.g. `demo-api-03-26`, `benchmark-02-26`), create the template first:
+extra_fields = get_additional(
+    status=StatusType.SUCCESS
+)
+
+logger.info("done", extra=extra_fields)
+```
+
+All logger internals (ES client, index routing, context enrichment, JSON formatting) are handled during initialization.
+
+## Extra fields and context
+
+`get_additional()` supports:
+
+- Core fields: `status`, `message`, `timestamp`, `service`, `environment`
+- Global request context: `request_id`, `method`, `endpoint`, `duration_ms`, `status_code`
+- Auth context: `email`, `name`, `user_id`, `session_id`, `ip_address`
+- Error context: `error_code`, `error_type`, `error_message`, `http_status`, `stack_error`
+- `custom_fields`: any additional data
+
+### Status enum
+
+```python
+from custom_logger import StatusType
+
+StatusType.SUCCESS
+StatusType.FAILURE
+StatusType.PENDING
+StatusType.ERROR
+```
+
+## Elasticsearch template and monthly index
+
+Create template before sending logs:
 
 ```bash
-# Demo app
-python scripts/create_es_template.py --prefix demo-api
-
-# Benchmark project
 python scripts/create_es_template.py --prefix benchmark
 ```
 
-Then use `index_pattern="demo-api-{month}"` or `index_pattern="benchmark-{month}"` in CustomLogger.
+Template pattern: `benchmark-*`
 
-### Start Elasticsearch
+Monthly index naming:
+
+- March 2026 -> `benchmark-03_26`
+- April 2026 -> `benchmark-04_26`
+- February 2026 -> `benchmark-02_26`
+
+`elastic.handler.py` resolves current index dynamically at log time.
+
+## Local setup
 
 ```bash
-docker run -d \
-  --name elasticsearch \
-  -p 9200:9200 \
-  -p 9300:9300 \
-  -e "discovery.type=single-node" \
-  -e "xpack.security.enabled=false" \
-  docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
 ```
 
-### Verify
+## Demo run
 
 ```bash
+uvicorn demo.app:app --reload
+```
+
+## Testing guide
+
+1) Start services:
+
+```bash
+docker start elasticsearch
+docker start kibana
 curl http://localhost:9200
 ```
 
-Expected: JSON with `"tagline" : "You Know, for Search"`
-
-### Start / Stop
+2) Create template:
 
 ```bash
-docker start elasticsearch   # Start
-docker stop elasticsearch    # Stop
-docker ps                    # Check status
+python scripts/create_es_template.py --prefix benchmark
 ```
 
----
-
-## 3. Kibana Setup (Docker)
-
-### Start Kibana
+3) Generate demo logs:
 
 ```bash
-docker run -d \
-  --name kibana \
-  -p 5601:5601 \
-  --add-host=host.docker.internal:host-gateway \
-  -e "ELASTICSEARCH_HOSTS=http://host.docker.internal:9200" \
-  docker.elastic.co/kibana/kibana:8.11.0
+curl http://localhost:8000/
+curl http://localhost:8000/health
+curl http://localhost:8000/users/1
+curl http://localhost:8000/debug
+curl http://localhost:8000/warning
+curl http://localhost:8000/error
 ```
 
-**Linux** (if `host.docker.internal` fails):
-```bash
-docker run -d \
-  --name kibana \
-  --network host \
-  -e "ELASTICSEARCH_HOSTS=http://localhost:9200" \
-  docker.elastic.co/kibana/kibana:8.11.0
-```
-
-### Open Kibana
-
-Browser: **http://localhost:5601**
-
-Wait 1–2 minutes for first load.
-
-### Start / Stop
+4) Verify in Elasticsearch:
 
 ```bash
-docker start kibana   # Start
-docker stop kibana    # Stop
+curl "http://localhost:9200/_cat/indices/benchmark*?v"
+curl "http://localhost:9200/benchmark-03_26/_search?pretty"
 ```
 
----
+5) Kibana:
 
+- Data view: `benchmark*`
+- Time field: `@timestamp`
+- Time range: Last 15 minutes / Last 24 hours
 
-
-## 4. Usage
-
-```python
-from custom_logger import CustomLogger
-
-logger = CustomLogger("app")
-logger.info("Application started")
-logger.info("User logged in", extra={"user_id": 123})
-```
-
-### Benchmark project (monthly indices: benchmark-03-26, benchmark-02-26)
-
-1. Create template: `python scripts/create_es_template.py --prefix benchmark`
-2. Use monthly pattern:
-
-```python
-logger = CustomLogger(
-    "benchmark",
-    index_name="benchmark",
-    index_pattern="benchmark-{month}",  # benchmark-03-26, benchmark-02-26
-    service_name="benchmark",
-    project_name="benchmark",
-)
-```
-
-
-
-## 5. FastAPI Demo
+6) Unit tests:
 
 ```bash
-# Run demo app
-uvicorn demo.app:app --reload
-# Open http://localhost:8000
-# Test: GET /, GET /health, GET /users/1, POST /items?name=book&price=10, GET /error
+pytest -q
+pytest --cov=custom_logger --cov-report=term-missing
 ```
 
-### Log Filtering API (index name, date, month)
+## CI/CD (GitHub Actions + uv)
 
-| Endpoint | Query Params | Description |
-|----------|--------------|-------------|
-| `GET /logs` | `index_pattern`, `from_date`, `to_date`, `year`, `month`, `severity`, `size`, `from` | Filter logs |
-| `GET /logs/indices` | `pattern` | List available indices |
+Workflow: `.github/workflows/publish.yml`
 
-**Examples:**
-- `GET /logs?index_pattern=python-logs*` – all logs
-- `GET /logs?index_pattern=python-logs-2025.03.11` – specific date index
-- `GET /logs?year=2025&month=3` – March 2025
-- `GET /logs?from_date=2025-03-01&to_date=2025-03-31` – date range
-- `GET /logs?severity=ERROR` – errors only
-
----
-
-## 6. Test
+Build and publish:
 
 ```bash
-# Required: activate venv (elasticsearch is installed in venv)
-source .venv/bin/activate
-python test_logs.py
-
-# Benchmark project test (see docs/BENCHMARK_TESTING.md)
-python test_benchmark.py
+uv build
+uv publish --index twosteps-pypi
 ```
 
-Verify: http://localhost:9200/python-logs/_search?pretty  
-Benchmark: http://localhost:9200/benchmark-03-26/_search?pretty
+Required secrets:
 
----
-
-## 7. No Results in Kibana?
-
-1. **Create Data View** – Stack Management → Data Views → Create. Index pattern: `demo-api*` or `benchmark*` (per project). Timestamp: **@timestamp**.
-2. **Expand time range** – Top-right: change "Last 15 minutes" to **"Last 24 hours"** or **"Last 7 days"**.
-3. **Correct index pattern** – Demo uses `demo-api-03-26`; select `demo-api*` in Discover, not `python-logs*`.
-4. **Create template first** – `python scripts/create_es_template.py --prefix demo-api`  
-
----
-
-## 8. Quick Reference
-
-| Action | Command |
-|--------|---------|
-| Start Elasticsearch | `docker start elasticsearch` |
-| Start Kibana | `docker start kibana` |
-| Stop Elasticsearch | `docker stop elasticsearch` |
-| Stop Kibana | `docker stop kibana` |
-| Elasticsearch URL | http://localhost:9200 |
-| Kibana URL | http://localhost:5601 |
-| Logs search URL | http://localhost:9200/python-logs/_search?pretty |
+- `TWOSTEPS_PYPI_USERNAME`
+- `TWOSTEPS_PYPI_PASSWORD`
 

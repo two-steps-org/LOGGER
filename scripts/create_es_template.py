@@ -29,22 +29,16 @@ def main():
         "index_patterns": index_pattern,
         "priority": args.priority,
         "template": {
-            "settings": {
-                "number_of_shards": 1,
-                "number_of_replicas": 0,
-            },
+            "settings": {"number_of_shards": 1},
             "mappings": {
                 "properties": {
-                    "@timestamp": {"type": "date"},
-                    "timestamp": {"type": "date"},
                     "severity": {"type": "keyword"},
                     "message": {"type": "text"},
-                    "project": {"type": "keyword"},
-                    "service": {"properties": {"name": {"type": "keyword"}}},
+                    "timestamp": {"type": "date"},
+                    "@timestamp": {"type": "date"},
+                    "service": {"type": "keyword"},
                     "environment": {"type": "keyword"},
-                    "auth": {"type": "object", "enabled": True},
-                    "request_context": {"type": "object", "enabled": True},
-                    "custom_fields": {"type": "object", "enabled": True},
+                    "status": {"type": "keyword"},
                 }
             },
         },
@@ -53,7 +47,7 @@ def main():
     try:
         client.indices.put_index_template(name=template_name, body=body)
         print(f"Template '{template_name}' created successfully.")
-        print(f"Logger should use index_pattern='{args.prefix}-{{month}}' (e.g. {args.prefix}-03-26 for March 2026)")
+        print(f"Logger should use index_pattern='{args.prefix}-{{month}}' (e.g. {args.prefix}-03_26 for March 2026)")
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)

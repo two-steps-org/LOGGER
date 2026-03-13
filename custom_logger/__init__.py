@@ -1,17 +1,29 @@
-"""
-Elastic Logger - CustomLogger inherits logging.Logger.
-Logs show in Elasticsearch and Kibana.
-"""
+"""custom_logger package root."""
 import logging
 import sys
 from typing import Dict, List, Any, Optional
 
-from .handler import ElasticsearchHandler
-from .formatter import ECSFormatter
-from .query import query_logs, list_indices
+from .handlers import ElasticsearchHandler
+from .formatters import JsonFormatter
+from .constants import StatusType
+from .get_logger import (
+    custom_logger,
+    twosteps_logger,
+    get_additional,
+    set_request_context,
+    clear_request_context,
+)
 
 __version__ = "1.0.0"
-__all__ = ["CustomLogger", "query_logs", "list_indices"]
+__all__ = [
+    "CustomLogger",
+    "twosteps_logger",
+    "custom_logger",
+    "get_additional",
+    "set_request_context",
+    "clear_request_context",
+    "StatusType",
+]
 
 # LogRecord reserved - cannot use in extra
 _RESERVED = {
@@ -54,9 +66,9 @@ class CustomLogger(logging.Logger):
         name: str,
         level: int = logging.INFO,
         elastic_hosts: Optional[List[Dict[str, Any]]] = None,
-        index_name: str = "python-logs",
+        index_name: str = "benchmark",
         index_pattern: Optional[str] = None,
-        service_name: str = "api",
+        service_name: str = "benchmark",
         project_name: Optional[str] = None,
         environment: str = "development",  # Required: development, staging, production
         console: bool = True,
@@ -72,7 +84,7 @@ class CustomLogger(logging.Logger):
         pattern = index_pattern or index_name
         proj = project_name or service_name
         es_handler = ElasticsearchHandler(
-            hosts=elastic_hosts or [{"host": "localhost", "port": 9200}],
+            hosts=elastic_hosts or [{"scheme": "http", "host": "localhost", "port": 9200}],
             index_name=index_name,
             index_pattern=pattern,
             service_name=service_name,
@@ -80,7 +92,7 @@ class CustomLogger(logging.Logger):
             environment=environment,
             **kwargs,
         )
-        es_handler.setFormatter(ECSFormatter())
+        es_handler.setFormatter(JsonFormatter())
         self.addHandler(es_handler)
 
     def _log(self, level, msg, args, exc_info=None, extra=None, stack_info=False, stacklevel=1):

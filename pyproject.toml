@@ -3,16 +3,16 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "elastic-logger"
+name = "custom_logger"
 version = "1.0.0"
-description = "General-purpose Python logger library for Elasticsearch with ECS format"
+description = "Custom structured logger library for Elasticsearch with monthly indices"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
     {name = "Twosteps"}
 ]
-keywords = ["logging", "elasticsearch", "ecs", "elastic"]
+keywords = ["logging", "elasticsearch", "custom_logger", "twosteps"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -24,8 +24,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "elasticsearch>=8.0.0,<9.0.0",
-    "fastapi==0.135.1"
+    "elasticsearch>=8.0.0,<9.0.0"
 ]
 
 [project.optional-dependencies]
@@ -36,4 +35,11 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["elastic_logger*"]
+include = ["custom_logger*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=custom_logger --cov-report=term-missing"
+
+[tool.uv.sources]
+custom_logger = { index = "twosteps-pypi" }

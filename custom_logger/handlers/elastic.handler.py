@@ -1,13 +1,12 @@
-"""Sends logs to Elasticsearch. View in Kibana."""
+import atexit
 import logging
 import sys
 import threading
-import atexit
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
-from .config import ElasticLoggerConfig
-from .formatter import ECSFormatter
+from ..configuration import ElasticLoggerConfig
+from ..formatters import ECSFormatter
 
 
 class ElasticsearchHandler(logging.Handler):
@@ -23,6 +22,7 @@ class ElasticsearchHandler(logging.Handler):
         self._lock = threading.Lock()
         self._client = None
         self._timer: Optional[threading.Timer] = None
+        self._ensure_index_template()
         self._start_flush_timer()
         atexit.register(self._flush_on_exit)
 
@@ -30,37 +30,58 @@ class ElasticsearchHandler(logging.Handler):
         if self._client is None:
             try:
                 from elasticsearch import Elasticsearch
+
                 self._client = Elasticsearch(**self.config.to_connection_params())
-            except ImportError as e:
-                raise ImportError("pip install elasticsearch") from e
+            except ImportError as exc:
+                raise ImportError("pip install elasticsearch") from exc
         return self._client
 
     def _get_index_name(self) -> str:
-        p = self.config.index_pattern
+        pattern = self.config.index_pattern
         now = datetime.now(timezone.utc)
-        if "{month}" in p:
-            # benchmark-03-26 format (MM-YY)
-            return p.replace("{month}", now.strftime("%m-%y"))
-        if "{date}" in p:
-            return p.replace("{date}", now.strftime("%Y.%m.%d"))
-        return p
+        if "{month}" in pattern:
+            return pattern.replace("{month}", now.strftime("%m_%y"))
+        if "{date}" in pattern:
+            return pattern.replace("{date}", now.strftime("%Y.%m.%d"))
+        return pattern
+
+    def _ensure_index_template(self) -> None:
+        prefix = (self.config.index_name or "benchmark").split("-")[0]
+        body = {
+            "index_patterns": [f"{prefix}-*"],
+            "template": {
+                "settings": {"number_of_shards": 1},
+                "mappings": {
+                    "properties": {
+                        "severity": {"type": "keyword"},
+                        "message": {"type": "text"},
+                        "timestamp": {"type": "date"},
+                        "service": {"type": "keyword"},
+                        "environment": {"type": "keyword"},
+                        "status": {"type": "keyword"},
+                    }
+                },
+            },
+        }
+        try:
+            self._get_client().indices.put_index_template(name=f"{prefix}-template", body=body)
+        except Exception as exc:  # pragma: no cover
+            print(f"[custom_logger] template warning: {exc}", file=sys.stderr)
 
     def _build_document(self, record: logging.LogRecord) -> Dict[str, Any]:
         record.service = self.config.service_name
         record.environment = self.config.environment or "development"
-        record.project_name = self.config.project_name or self.config.service_name
         if isinstance(self.formatter, ECSFormatter):
-            doc = self.formatter._record_to_client_format(record)
-        else:
-            doc = {
-                "severity": record.levelname,
-                "message": self.format(record),
-                "@timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
-                "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
-                "service": {"name": self.config.service_name},
-                "environment": self.config.environment or "development",
-            }
-        return doc
+            return self.formatter._record_to_client_format(record)
+        return {
+            "severity": record.levelname,
+            "message": self.format(record),
+            "@timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+            "service": self.config.service_name,
+            "environment": self.config.environment or "development",
+            "status": getattr(record, "status", "PENDING"),
+        }
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
@@ -69,27 +90,22 @@ class ElasticsearchHandler(logging.Handler):
                 self._buffer.append(doc)
                 if len(self._buffer) >= self.config.bulk_size:
                     self._flush_buffer()
-        except Exception as e:
+        except Exception:
             self.handleError(record)
 
     def _flush_buffer(self) -> None:
         if not self._buffer:
             return
-        bulk_body = []
         idx = self._get_index_name()
+        bulk_body: List[Dict[str, Any]] = []
         for doc in self._buffer:
             bulk_body.append({"index": {"_index": idx}})
             bulk_body.append(doc)
         self._buffer = []
         try:
-            resp = self._get_client().bulk(body=bulk_body, refresh=True)
-            if resp.get("errors"):
-                for item in resp.get("items", []):
-                    idx = item.get("index", {})
-                    if "error" in idx:
-                        print(f"[elastic_logger] Index error: {idx['error']}", file=sys.stderr)
-        except Exception as e:
-            print(f"[elastic_logger] Error: {e}", file=sys.stderr)
+            self._get_client().bulk(body=bulk_body, refresh=True)
+        except Exception as exc:
+            print(f"[custom_logger] Error: {exc}", file=sys.stderr)
 
     def _start_flush_timer(self) -> None:
         def flush():
@@ -98,6 +114,7 @@ class ElasticsearchHandler(logging.Handler):
             self._timer = threading.Timer(self.config.flush_interval, flush)
             self._timer.daemon = True
             self._timer.start()
+
         self._timer = threading.Timer(self.config.flush_interval, flush)
         self._timer.daemon = True
         self._timer.start()
@@ -107,3 +124,4 @@ class ElasticsearchHandler(logging.Handler):
             self._timer.cancel()
         with self._lock:
             self._flush_buffer()
+
