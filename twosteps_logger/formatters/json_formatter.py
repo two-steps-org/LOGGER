@@ -58,14 +58,14 @@ class JsonFormatter(logging.Formatter):
             message = message[: self.MAX_MESSAGE_LENGTH - 3] + "..."
 
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-        svc = getattr(record, "service", "benchmark")
+        svc = getattr(record, "service", "api")
         env = getattr(record, "environment", "development")
         doc: Dict[str, Any] = {
             "@timestamp": ts,
             "severity": severity,
             "message": message,
             "timestamp": ts,
-            "service": svc if isinstance(svc, str) else svc.get("name", "benchmark"),
+            "service": svc if isinstance(svc, str) else svc.get("name", "api"),
             "environment": env,
             "status": getattr(record, "status", "PENDING"),
         }

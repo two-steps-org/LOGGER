@@ -51,6 +51,21 @@ logger.info("done", extra=extra_fields)
 
 All logger internals (ES client, index routing, context enrichment, JSON formatting) are handled during initialization.
 
+### Configure once, then get logger by name
+
+```python
+import logging
+from twosteps_logger import get_logger, setup_logger
+
+setup_logger(
+    level=logging.DEBUG,
+    index_prefix="benchmark",
+    service="demo-api",
+    environment="development",
+)
+logger = get_logger(__name__)
+```
+
 ## Extra fields and context
 
 `get_additional()` supports:

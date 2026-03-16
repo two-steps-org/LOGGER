@@ -35,7 +35,6 @@ def main():
                     "severity": {"type": "keyword"},
                     "message": {"type": "text"},
                     "timestamp": {"type": "date"},
-                    "@timestamp": {"type": "date"},
                     "service": {"type": "keyword"},
                     "environment": {"type": "keyword"},
                     "status": {"type": "keyword"},

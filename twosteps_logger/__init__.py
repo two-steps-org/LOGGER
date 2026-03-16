@@ -1,5 +1,6 @@
 """twosteps_logger package root."""
 import logging
+import os
 import sys
 from typing import Dict, List, Any, Optional
 
@@ -8,6 +9,8 @@ from .formatters import JsonFormatter
 from .constants import StatusType
 from .get_logger import (
     twosteps_logger,
+    get_logger,
+    setup_logger,
     get_additional,
     set_request_context,
     clear_request_context,
@@ -17,6 +20,8 @@ __version__ = "1.0.0"
 __all__ = [
     "CustomLogger",
     "twosteps_logger",
+    "get_logger",
+    "setup_logger",
     "get_additional",
     "set_request_context",
     "clear_request_context",
@@ -64,9 +69,9 @@ class CustomLogger(logging.Logger):
         name: str,
         level: int = logging.INFO,
         elastic_hosts: Optional[List[Dict[str, Any]]] = None,
-        index_name: str = "benchmark",
+        index_name: str = "python-logs",
         index_pattern: Optional[str] = None,
-        service_name: str = "benchmark",
+        service_name: str = "api",
         project_name: Optional[str] = None,
         environment: str = "development",  # Required: development, staging, production
         console: bool = True,
@@ -81,8 +86,9 @@ class CustomLogger(logging.Logger):
 
         pattern = index_pattern or index_name
         proj = project_name or service_name
+        resolved_hosts = elastic_hosts or self._default_hosts_for_env(environment)
         es_handler = ElasticsearchHandler(
-            hosts=elastic_hosts or [{"scheme": "http", "host": "localhost", "port": 9200}],
+            hosts=resolved_hosts,
             index_name=index_name,
             index_pattern=pattern,
             service_name=service_name,
@@ -92,6 +98,16 @@ class CustomLogger(logging.Logger):
         )
         es_handler.setFormatter(JsonFormatter())
         self.addHandler(es_handler)
+
+    @staticmethod
+    def _default_hosts_for_env(environment: str) -> List[Dict[str, Any]]:
+        """Resolve fallback ES hosts by environment."""
+        env_name = (environment or "development").lower()
+        default_host = "localhost" if env_name in {"local", "development"} else "elasticsearch"
+        host = os.getenv("ELASTIC_HOST", default_host)
+        port = int(os.getenv("ELASTIC_PORT", "9200"))
+        scheme = os.getenv("ELASTIC_SCHEME", "http")
+        return [{"scheme": scheme, "host": host, "port": port}]
 
     def _log(self, level, msg, args, exc_info=None, extra=None, stack_info=False, stacklevel=1):
         extra = _filter_extra(extra)
