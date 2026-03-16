@@ -9,7 +9,7 @@ import sys
 
 def main():
     parser = argparse.ArgumentParser(description="Create ES index template for monthly logs")
-    parser.add_argument("--prefix", default="benchmark", help="Index prefix (default: benchmark)")
+    parser.add_argument("--prefix", default="python-logs", help="Index prefix (default: python-logs)")
     parser.add_argument("--priority", type=int, default=0, help="Template priority (use 10+ if conflict with broader pattern like benchmark-*)")
     parser.add_argument("--host", default="localhost", help="ES host")
     parser.add_argument("--port", type=int, default=9200, help="ES port")

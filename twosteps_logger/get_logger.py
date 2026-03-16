@@ -8,7 +8,7 @@ from .configuration import get_logger_configuration
 
 _request_context: ContextVar[Dict[str, Any]] = ContextVar("request_context", default={})
 _default_meta: ContextVar[Dict[str, str]] = ContextVar(
-    "default_meta", default={"service": "benchmark", "environment": "development"}
+    "default_meta", default={"service": "api", "environment": "development"}
 )
 _logger_defaults: ContextVar[Dict[str, Any]] = ContextVar("logger_defaults", default={})
 
@@ -77,7 +77,7 @@ def get_additional(
         "status": status.value if isinstance(status, StatusType) else str(status),
         "message": message,
         "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
-        "service": service or defaults.get("service", "benchmark"),
+        "service": service or defaults.get("service", "api"),
         "environment": environment or defaults.get("environment", "development"),
     }
     extras.update(_request_context.get())
@@ -100,11 +100,11 @@ def twosteps_logger(name: str, **kwargs: Any) -> logging.Logger:
     )
     resolved_index_prefix = kwargs.get(
         "index_prefix",
-        kwargs.get("index_name", defaults.get("index_prefix", "benchmark")),
+        kwargs.get("index_name", defaults.get("index_prefix", "python-logs")),
     )
     resolved_service = kwargs.get(
         "service",
-        kwargs.get("service_name", defaults.get("service", "benchmark")),
+        kwargs.get("service_name", defaults.get("service", "api")),
     )
     resolved_environment = kwargs.get("environment", defaults.get("environment", "development"))
     resolved_hosts = kwargs.get(

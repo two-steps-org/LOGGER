@@ -7,15 +7,15 @@ class LoggerConfiguration:
     hosts: List[Dict[str, Any]] = field(
         default_factory=lambda: [{"scheme": "http", "host": "localhost", "port": 9200}]
     )
-    index_name: str = "benchmark"
-    index_pattern: str = "benchmark-{month}"
+    index_name: str = "python-logs"
+    index_pattern: str = "python-logs-{month}"
     use_ssl: bool = False
     verify_certs: bool = True
     username: Optional[str] = None
     password: Optional[str] = None
     api_key: Optional[str] = None
     cloud_id: Optional[str] = None
-    service_name: str = "benchmark"
+    service_name: str = "api"
     project_name: Optional[str] = None
     environment: Optional[str] = "development"
     flush_interval: float = 1.0

@@ -48,7 +48,7 @@ class ElasticsearchHandler(logging.Handler):
     def _ensure_index_template(self) -> None:
         # Use the full configured prefix (e.g. final-test-logger), not only first token.
         # Otherwise we create broad patterns like final-* that conflict with specific templates.
-        prefix = self.config.index_name or "benchmark"
+        prefix = self.config.index_name or "python-logs"
         body = {
             "index_patterns": [f"{prefix}-*"],
             "template": {
