@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "custom_logger"
+name = "twosteps_logger"
 version = "1.0.0"
 description = "Custom structured logger library for Elasticsearch with monthly indices"
 readme = "README.md"
@@ -12,7 +12,7 @@ license = {text = "MIT"}
 authors = [
     {name = "Twosteps"}
 ]
-keywords = ["logging", "elasticsearch", "custom_logger", "twosteps"]
+keywords = ["logging", "elasticsearch", "twosteps_logger", "twosteps"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -32,14 +32,18 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
 ]
+demo = [
+    "fastapi>=0.110.0",
+    "uvicorn>=0.30.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["custom_logger*"]
+include = ["twosteps_logger*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=custom_logger --cov-report=term-missing"
+addopts = "--cov=twosteps_logger --cov-report=term-missing --cov-fail-under=80"
 
 [tool.uv.sources]
-custom_logger = { index = "twosteps-pypi" }
+twosteps_logger = { index = "twosteps-pypi" }

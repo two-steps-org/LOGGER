@@ -86,9 +86,3 @@ def twosteps_logger(name: str, **kwargs: Any) -> logging.Logger:
         }
     )
     return CustomLogger(name=name, **kwargs)
-
-
-def custom_logger(name: str, **kwargs: Any) -> logging.Logger:
-    """Alias for twosteps_logger for backward compatibility."""
-    return twosteps_logger(name=name, **kwargs)
-

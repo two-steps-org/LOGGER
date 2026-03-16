@@ -46,7 +46,9 @@ class ElasticsearchHandler(logging.Handler):
         return pattern
 
     def _ensure_index_template(self) -> None:
-        prefix = (self.config.index_name or "benchmark").split("-")[0]
+        # Use the full configured prefix (e.g. final-test-logger), not only first token.
+        # Otherwise we create broad patterns like final-* that conflict with specific templates.
+        prefix = self.config.index_name or "benchmark"
         body = {
             "index_patterns": [f"{prefix}-*"],
             "template": {
@@ -66,7 +68,7 @@ class ElasticsearchHandler(logging.Handler):
         try:
             self._get_client().indices.put_index_template(name=f"{prefix}-template", body=body)
         except Exception as exc:  # pragma: no cover
-            print(f"[custom_logger] template warning: {exc}", file=sys.stderr)
+            print(f"[twosteps_logger] template warning: {exc}", file=sys.stderr)
 
     def _build_document(self, record: logging.LogRecord) -> Dict[str, Any]:
         record.service = self.config.service_name
@@ -105,7 +107,7 @@ class ElasticsearchHandler(logging.Handler):
         try:
             self._get_client().bulk(body=bulk_body, refresh=True)
         except Exception as exc:
-            print(f"[custom_logger] Error: {exc}", file=sys.stderr)
+            print(f"[twosteps_logger] Error: {exc}", file=sys.stderr)
 
     def _start_flush_timer(self) -> None:
         def flush():

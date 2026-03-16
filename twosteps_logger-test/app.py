@@ -1,30 +1,36 @@
 """
-FastAPI demo using modular custom_logger package.
-Run: uvicorn demo.app:app --reload
+FastAPI logger test app using twosteps_logger package.
+Run: uvicorn app:app --app-dir twosteps_logger-test --reload
 """
 import logging
+import sys
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 
-from custom_logger import StatusType, get_additional, set_request_context, twosteps_logger
+# Ensure project root is importable when running with --app-dir.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from twosteps_logger import StatusType, get_additional, set_request_context, twosteps_logger
 
 logger = twosteps_logger(
     __name__,
     level=logging.DEBUG,
-    index_prefix="benchmark",
-    service="demo-api",
+    index_prefix="twosteps-project-logs",
+    service="twosteps-project-logs",
     environment="development",
 )
 
-app = FastAPI(title="Demo API")
-
+app = FastAPI(title="Twosteps Logger Test API")
 
 
 @app.get("/")
 def root():
     set_request_context(method="GET", endpoint="/", request_id="rq-root")
     logger.info("GET /", extra=get_additional(status=StatusType.SUCCESS))
-    return {"message": "Hello"}
+    return {"message": "Twosteps logger test API is running"}
 
 
 @app.get("/health")

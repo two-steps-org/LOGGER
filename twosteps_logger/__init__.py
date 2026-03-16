@@ -1,4 +1,4 @@
-"""custom_logger package root."""
+"""twosteps_logger package root."""
 import logging
 import sys
 from typing import Dict, List, Any, Optional
@@ -7,7 +7,6 @@ from .handlers import ElasticsearchHandler
 from .formatters import JsonFormatter
 from .constants import StatusType
 from .get_logger import (
-    custom_logger,
     twosteps_logger,
     get_additional,
     set_request_context,
@@ -18,7 +17,6 @@ __version__ = "1.0.0"
 __all__ = [
     "CustomLogger",
     "twosteps_logger",
-    "custom_logger",
     "get_additional",
     "set_request_context",
     "clear_request_context",
