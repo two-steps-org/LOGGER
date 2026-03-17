@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "twosteps_logger"
-version = "1.0.0"
+version = "1.0.1"
 description = "Custom structured logger library for Elasticsearch with monthly indices"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -45,5 +45,3 @@ include = ["twosteps_logger*"]
 testpaths = ["tests"]
 addopts = "--cov=twosteps_logger --cov-report=term-missing --cov-fail-under=80"
 
-[tool.uv.indexes]
-twosteps-github = { url = "https://pypi.pkg.github.com/two-steps-org/", publish = true }
