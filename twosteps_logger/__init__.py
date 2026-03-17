@@ -87,6 +87,12 @@ class CustomLogger(logging.Logger):
         pattern = index_pattern or index_name
         proj = project_name or service_name
         resolved_hosts = elastic_hosts or self._default_hosts_for_env(environment)
+        if "username" not in kwargs and "password" not in kwargs:
+            env_user, env_pass = self._default_auth_for_env()
+            if env_user:
+                kwargs["username"] = env_user
+            if env_pass:
+                kwargs["password"] = env_pass
         es_handler = ElasticsearchHandler(
             hosts=resolved_hosts,
             index_name=index_name,
@@ -108,6 +114,12 @@ class CustomLogger(logging.Logger):
         port = int(os.getenv("ELASTIC_PORT", "9200"))
         scheme = os.getenv("ELASTIC_SCHEME", "http")
         return [{"scheme": scheme, "host": host, "port": port}]
+    
+    @staticmethod
+    def _default_auth_for_env() -> tuple[str | None, str | None]:
+        username = os.getenv("ELASTIC_USERNAME")
+        password = os.getenv("ELASTIC_PASSWORD")
+        return username, password
 
     def _log(self, level, msg, args, exc_info=None, extra=None, stack_info=False, stacklevel=1):
         extra = _filter_extra(extra)

@@ -1,6 +1,7 @@
 import logging
 from contextvars import ContextVar
 from datetime import datetime, timezone
+import os
 from typing import Any, Dict, Optional
 
 from .constants import StatusType
@@ -40,6 +41,8 @@ def setup_logger(
     hosts: Optional[Any] = None,
     flush_interval: Optional[float] = None,
     bulk_size: Optional[int] = None,
+    username: Optional[str] = None,
+    password: Optional[str] = None,
 ) -> None:
     """Set process-level defaults so callers can use get_logger(name) only."""
     resolved_index = index_prefix or index_name
@@ -61,6 +64,10 @@ def setup_logger(
         _logger_defaults["flush_interval"] = flush_interval
     if bulk_size is not None:
         _logger_defaults["bulk_size"] = bulk_size
+    if username is not None:
+        _logger_defaults["username"] = username
+    if password is not None:
+        _logger_defaults["password"] = password
 
 
 def get_additional(
@@ -114,6 +121,9 @@ def twosteps_logger(name: str, **kwargs: Any) -> logging.Logger:
     )
     resolved_flush_interval = kwargs.get("flush_interval", defaults.get("flush_interval", 1.0))
     resolved_bulk_size = kwargs.get("bulk_size", defaults.get("bulk_size", 100))
+    resolved_username = kwargs.get("username", defaults.get("username", os.getenv("ELASTIC_USERNAME")))
+    resolved_password = kwargs.get("password", defaults.get("password", os.getenv("ELASTIC_PASSWORD")))
+
 
     config = get_logger_configuration(
         index_prefix=resolved_index_prefix,
@@ -138,6 +148,8 @@ def twosteps_logger(name: str, **kwargs: Any) -> logging.Logger:
     kwargs.setdefault("elastic_hosts", config.hosts)
     kwargs.setdefault("flush_interval", config.flush_interval)
     kwargs.setdefault("bulk_size", config.bulk_size)
+    kwargs.setdefault("username", resolved_username)
+    kwargs.setdefault("password", resolved_password)
 
     _default_meta.set(
         {
