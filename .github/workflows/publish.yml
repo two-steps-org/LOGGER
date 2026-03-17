@@ -1,0 +1,76 @@
+name: CI/CD Pipeline
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: logger-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install package and dependencies
+        run: uv sync --extra dev --extra demo
+
+      - name: Static sanity check (compile)
+        run: |
+          python -m compileall twosteps_logger
+
+      - name: Run tests (if present)
+        run: |
+          if [ -d tests ] && [ "$(ls -A tests)" ]; then
+            uv run pytest
+          else
+            echo "No tests found, skipping pytest."
+          fi
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Build package
+        run: uv build
+
+      - name: Publish to private PyPI
+        env:
+          UV_PUBLISH_USERNAME: ${{ secrets.TWOSTEPS_PYPI_USERNAME }}
+          UV_PUBLISH_PASSWORD: ${{ secrets.TWOSTEPS_PYPI_PASSWORD }}
+        run: uv publish --index twosteps-pypi
+

@@ -1,17 +1,32 @@
-"""
-Elastic Logger - CustomLogger inherits logging.Logger.
-Logs show in Elasticsearch and Kibana.
-"""
+"""twosteps_logger package root."""
 import logging
+import os
 import sys
 from typing import Dict, List, Any, Optional
 
-from .handler import ElasticsearchHandler
-from .formatter import ECSFormatter
-from .query import query_logs, list_indices
+from .handlers import ElasticsearchHandler
+from .formatters import JsonFormatter
+from .constants import StatusType
+from .get_logger import (
+    twosteps_logger,
+    get_logger,
+    setup_logger,
+    get_additional,
+    set_request_context,
+    clear_request_context,
+)
 
 __version__ = "1.0.0"
-__all__ = ["CustomLogger", "query_logs", "list_indices"]
+__all__ = [
+    "CustomLogger",
+    "twosteps_logger",
+    "get_logger",
+    "setup_logger",
+    "get_additional",
+    "set_request_context",
+    "clear_request_context",
+    "StatusType",
+]
 
 # LogRecord reserved - cannot use in extra
 _RESERVED = {
@@ -71,8 +86,15 @@ class CustomLogger(logging.Logger):
 
         pattern = index_pattern or index_name
         proj = project_name or service_name
+        resolved_hosts = elastic_hosts or self._default_hosts_for_env(environment)
+        if "username" not in kwargs and "password" not in kwargs:
+            env_user, env_pass = self._default_auth_for_env()
+            if env_user:
+                kwargs["username"] = env_user
+            if env_pass:
+                kwargs["password"] = env_pass
         es_handler = ElasticsearchHandler(
-            hosts=elastic_hosts or [{"host": "localhost", "port": 9200}],
+            hosts=resolved_hosts,
             index_name=index_name,
             index_pattern=pattern,
             service_name=service_name,
@@ -80,8 +102,24 @@ class CustomLogger(logging.Logger):
             environment=environment,
             **kwargs,
         )
-        es_handler.setFormatter(ECSFormatter())
+        es_handler.setFormatter(JsonFormatter())
         self.addHandler(es_handler)
+
+    @staticmethod
+    def _default_hosts_for_env(environment: str) -> List[Dict[str, Any]]:
+        """Resolve fallback ES hosts by environment."""
+        env_name = (environment or "development").lower()
+        default_host = "localhost" if env_name in {"local", "development"} else "elasticsearch"
+        host = os.getenv("ELASTIC_HOST", default_host)
+        port = int(os.getenv("ELASTIC_PORT", "9200"))
+        scheme = os.getenv("ELASTIC_SCHEME", "http")
+        return [{"scheme": scheme, "host": host, "port": port}]
+    
+    @staticmethod
+    def _default_auth_for_env() -> tuple[str | None, str | None]:
+        username = os.getenv("ELASTIC_USERNAME")
+        password = os.getenv("ELASTIC_PASSWORD")
+        return username, password
 
     def _log(self, level, msg, args, exc_info=None, extra=None, stack_info=False, stacklevel=1):
         extra = _filter_extra(extra)

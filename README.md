@@ -1,207 +1,207 @@
-# Elastic Logger
+# twosteps_logger
 
-Python logging library that sends application logs to Elasticsearch. Uses **ECS format**. Works with Flask, Django, FastAPI, etc.
+A structured logging library for Python that ships logs to Elasticsearch with automatic monthly index rotation, JSON formatting, and async-safe request context propagation.
+
+## Package Structure
+
+```
+twosteps_logger/
+├── __init__.py
+├── configuration/
+│   ├── __init__.py
+│   ├── get_logger_configuration.py
+│   └── logger_configuration.py
+├── constants.py
+├── formatters/
+│   ├── __init__.py
+│   └── json_formatter.py
+├── get_logger.py
+└── handlers/
+    ├── __init__.py
+    └── elastic.handler.py
+```
+
+CI/CD workflow: `.github/workflows/publish.yml`
 
 ---
 
-## 1. Project Setup
+## Install from private PyPI
 
-### Prerequisites
-- Python 3.8+
-- Docker (for Elasticsearch & Kibana)
+```toml
+# pyproject.toml (consumer app)
+[tool.uv.sources]
+twosteps_logger = { index = "twosteps-pypi" }
 
-### Steps
-
-```bash
-# Clone / enter project
-cd /path/to/logger
-
-# Create virtual environment
-python -m venv .venv
-
-# Activate (Linux / Mac)
-source .venv/bin/activate
-
-# Activate (Windows PowerShell)
-# .venv\Scripts\Activate.ps1
-
-# Install library
-pip install -e .
-```
-
----
-
-## 2. Elasticsearch Setup (Docker)
-
-### Create index template (for monthly logs like demo-api-03-26)
-
-For project-specific indices (e.g. `demo-api-03-26`, `benchmark-02-26`), create the template first:
-
-```bash
-# Demo app
-python scripts/create_es_template.py --prefix demo-api
-
-# Benchmark project
-python scripts/create_es_template.py --prefix benchmark
-```
-
-Then use `index_pattern="demo-api-{month}"` or `index_pattern="benchmark-{month}"` in CustomLogger.
-
-### Start Elasticsearch
-
-```bash
-docker run -d \
-  --name elasticsearch \
-  -p 9200:9200 \
-  -p 9300:9300 \
-  -e "discovery.type=single-node" \
-  -e "xpack.security.enabled=false" \
-  docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-```
-
-### Verify
-
-```bash
-curl http://localhost:9200
-```
-
-Expected: JSON with `"tagline" : "You Know, for Search"`
-
-### Start / Stop
-
-```bash
-docker start elasticsearch   # Start
-docker stop elasticsearch    # Stop
-docker ps                    # Check status
+[project]
+dependencies = ["twosteps_logger>=1.0.0"]
 ```
 
 ---
 
-## 3. Kibana Setup (Docker)
+## Usage
 
-### Start Kibana
+### Recommended: configure once, log everywhere
 
-```bash
-docker run -d \
-  --name kibana \
-  -p 5601:5601 \
-  --add-host=host.docker.internal:host-gateway \
-  -e "ELASTICSEARCH_HOSTS=http://host.docker.internal:9200" \
-  docker.elastic.co/kibana/kibana:8.11.0
-```
-
-**Linux** (if `host.docker.internal` fails):
-```bash
-docker run -d \
-  --name kibana \
-  --network host \
-  -e "ELASTICSEARCH_HOSTS=http://localhost:9200" \
-  docker.elastic.co/kibana/kibana:8.11.0
-```
-
-### Open Kibana
-
-Browser: **http://localhost:5601**
-
-Wait 1–2 minutes for first load.
-
-### Start / Stop
-
-```bash
-docker start kibana   # Start
-docker stop kibana    # Stop
-```
-
----
-
-
-
-## 4. Usage
+Call `setup_logger` once at application startup (e.g. `main.py` or `app/__init__.py`).  
+All Elasticsearch connection details are read from environment variables and the config set here.
 
 ```python
-from custom_logger import CustomLogger
+# main.py / app startup
+from twosteps_logger import setup_logger
 
-logger = CustomLogger("app")
-logger.info("Application started")
-logger.info("User logged in", extra={"user_id": 123})
-```
-
-### Benchmark project (monthly indices: benchmark-03-26, benchmark-02-26)
-
-1. Create template: `python scripts/create_es_template.py --prefix benchmark`
-2. Use monthly pattern:
-
-```python
-logger = CustomLogger(
-    "benchmark",
-    index_name="benchmark",
-    index_pattern="benchmark-{month}",  # benchmark-03-26, benchmark-02-26
-    service_name="benchmark",
-    project_name="benchmark",
+setup_logger(
+    index_prefix="benchmark",   # becomes benchmark-MM_YY index names
+    service="my-api",
+    environment="production",   # or read from ENV
 )
 ```
 
+Then in every module, just get a logger by name:
 
+```python
+# any module
+from twosteps_logger import get_logger
 
-## 5. FastAPI Demo
-
-```bash
-# Run demo app
-uvicorn demo.app:app --reload
-# Open http://localhost:8000
-# Test: GET /, GET /health, GET /users/1, POST /items?name=book&price=10, GET /error
+logger = get_logger(__name__)
+logger.info("request handled")
 ```
 
-### Log Filtering API (index name, date, month)
+### Zero-config quick start
 
-| Endpoint | Query Params | Description |
-|----------|--------------|-------------|
-| `GET /logs` | `index_pattern`, `from_date`, `to_date`, `year`, `month`, `severity`, `size`, `from` | Filter logs |
-| `GET /logs/indices` | `pattern` | List available indices |
+If you have not called `setup_logger`, the logger resolves all settings from environment variables:
 
-**Examples:**
-- `GET /logs?index_pattern=python-logs*` – all logs
-- `GET /logs?index_pattern=python-logs-2025.03.11` – specific date index
-- `GET /logs?year=2025&month=3` – March 2025
-- `GET /logs?from_date=2025-03-01&to_date=2025-03-31` – date range
-- `GET /logs?severity=ERROR` – errors only
+```python
+from twosteps_logger import twosteps_logger
 
----
-
-## 6. Test
-
-```bash
-# Required: activate venv (elasticsearch is installed in venv)
-source .venv/bin/activate
-python test_logs.py
-
-# Benchmark project test (see docs/BENCHMARK_TESTING.md)
-python test_benchmark.py
+logger = twosteps_logger(__name__)
+logger.info("ready")
 ```
 
-Verify: http://localhost:9200/python-logs/_search?pretty  
-Benchmark: http://localhost:9200/benchmark-03-26/_search?pretty
+### StatusType enum
+
+```python
+from twosteps_logger import StatusType
+
+StatusType.SUCCESS   # "SUCCESS"
+StatusType.FAILURE   # "FAILURE"
+StatusType.PENDING   # "PENDING"
+StatusType.ERROR     # "ERROR"
+```
+
+### Request context (async-safe)
+
+Use `set_request_context` / `clear_request_context` in middleware to propagate per-request metadata
+into every log record automatically (uses `contextvars.ContextVar`):
+
+```python
+from twosteps_logger import set_request_context, clear_request_context
+
+# FastAPI / Starlette middleware example
+async def logging_middleware(request, call_next):
+    set_request_context(
+        request_id=request.headers.get("X-Request-ID"),
+        method=request.method,
+        endpoint=str(request.url.path),
+    )
+    response = await call_next(request)
+    clear_request_context()
+    return response
+```
+
+### Building structured extra fields (`get_additional`)
+
+> **Note:** `get_additional` is provided as a convenience helper. Teams that need project-specific
+> extra field shapes should build their own helper instead of relying on this one.
+
+```python
+from twosteps_logger import get_logger, get_additional, StatusType
+
+logger = get_logger(__name__)
+
+extra = get_additional(
+    status=StatusType.SUCCESS,
+    custom_fields={"action": "checkout", "order_id": "ord-123"},
+)
+logger.info("order completed", extra=extra)
+```
+
+`get_additional` merges:
+- **Core fields**: `status`, `message`, `timestamp`, `service`, `environment`
+- **Request context**: any values set via `set_request_context`
+- **Auth context** (optional `auth` dict): `email`, `name`, `user_id`, `session_id`, `ip_address`
+- **Error context** (optional `error` dict): `error_code`, `error_type`, `error_message`, `http_status`
+- **Custom fields** (optional): nested under `custom_fields` in the ES document
 
 ---
 
-## 7. No Results in Kibana?
+## Elasticsearch — index template & monthly indexes
 
-1. **Create Data View** – Stack Management → Data Views → Create. Index pattern: `demo-api*` or `benchmark*` (per project). Timestamp: **@timestamp**.
-2. **Expand time range** – Top-right: change "Last 15 minutes" to **"Last 24 hours"** or **"Last 7 days"**.
-3. **Correct index pattern** – Demo uses `demo-api-03-26`; select `demo-api*` in Discover, not `python-logs*`.
-4. **Create template first** – `python scripts/create_es_template.py --prefix demo-api`  
+### Index template
+
+The handler automatically creates an index template on startup (one HTTP call per prefix per process).
+You can also run the script once manually:
+
+```bash
+python scripts/create_es_template.py --prefix benchmark
+```
+
+Template covers the `benchmark-*` pattern with the required field mappings:
+
+| Field         | ES type   |
+|---------------|-----------|
+| `severity`    | `keyword` |
+| `message`     | `text`    |
+| `timestamp`   | `date`    |
+| `service`     | `keyword` |
+| `environment` | `keyword` |
+| `status`      | `keyword` |
+
+### Monthly index naming
+
+Indexes are named `{prefix}-MM_YY`, resolved at log-flush time:
+
+| Month          | Index name         |
+|----------------|--------------------|
+| March 2026     | `benchmark-03_26`  |
+| April 2026     | `benchmark-04_26`  |
+| February 2026  | `benchmark-02_26`  |
+
+### Environment variables
+
+| Variable        | Default       | Description              |
+|-----------------|---------------|--------------------------|
+| `ELASTIC_HOST`  | `localhost`   | Elasticsearch hostname   |
+| `ELASTIC_PORT`  | `9200`        | Elasticsearch port       |
+| `ELASTIC_SCHEME`| `http`        | `http` or `https`        |
+
+For local development no configuration is needed. For other environments, set these variables.
 
 ---
 
-## 8. Quick Reference
+## Local setup
 
-| Action | Command |
-|--------|---------|
-| Start Elasticsearch | `docker start elasticsearch` |
-| Start Kibana | `docker start kibana` |
-| Stop Elasticsearch | `docker stop elasticsearch` |
-| Stop Kibana | `docker stop kibana` |
-| Elasticsearch URL | http://localhost:9200 |
-| Kibana URL | http://localhost:5601 |
-| Logs search URL | http://localhost:9200/python-logs/_search?pretty |
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+```
 
+## Running tests
+
+```bash
+pytest
+# or with coverage report:
+pytest --cov=twosteps_logger --cov-report=term-missing
+```
+
+Coverage threshold is enforced at 80% (currently ~95%).
+
+---
+
+## CI/CD — GitHub Actions + uv
+
+Workflow: `.github/workflows/publish.yml`
+
+- **verify** job: runs on every PR and push to `main` — installs with `uv sync`, compiles, runs tests.
+- **publish** job: runs only on `v*` tags — builds with `uv build`, publishes with `uv publish --index twosteps-pypi`.
+
+Required GitHub secrets: `TWOSTEPS_PYPI_USERNAME`, `TWOSTEPS_PYPI_PASSWORD`.
