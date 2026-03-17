@@ -3,10 +3,14 @@ import logging
 import sys
 import threading
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from ..configuration import ElasticLoggerConfig
 from ..formatters import ECSFormatter
+
+# Tracks which index template prefixes have already been created this process lifetime.
+# Prevents redundant PUT requests when multiple loggers share the same prefix.
+_templates_created: Set[str] = set()
 
 
 class ElasticsearchHandler(logging.Handler):
@@ -49,24 +53,27 @@ class ElasticsearchHandler(logging.Handler):
         # Use the full configured prefix (e.g. final-test-logger), not only first token.
         # Otherwise we create broad patterns like final-* that conflict with specific templates.
         prefix = self.config.index_name or "python-logs"
-        body = {
-            "index_patterns": [f"{prefix}-*"],
-            "template": {
-                "settings": {"number_of_shards": 1},
-                "mappings": {
-                    "properties": {
-                        "severity": {"type": "keyword"},
-                        "message": {"type": "text"},
-                        "timestamp": {"type": "date"},
-                        "service": {"type": "keyword"},
-                        "environment": {"type": "keyword"},
-                        "status": {"type": "keyword"},
-                    }
-                },
-            },
-        }
+        if prefix in _templates_created:
+            return
         try:
-            self._get_client().indices.put_index_template(name=f"{prefix}-template", body=body)
+            self._get_client().indices.put_index_template(
+                name=f"{prefix}-template",
+                index_patterns=[f"{prefix}-*"],
+                template={
+                    "settings": {"number_of_shards": 1},
+                    "mappings": {
+                        "properties": {
+                            "severity": {"type": "keyword"},
+                            "message": {"type": "text"},
+                            "timestamp": {"type": "date"},
+                            "service": {"type": "keyword"},
+                            "environment": {"type": "keyword"},
+                            "status": {"type": "keyword"},
+                        }
+                    },
+                },
+            )
+            _templates_created.add(prefix)
         except Exception as exc:  # pragma: no cover
             print(f"[twosteps_logger] template warning: {exc}", file=sys.stderr)
 

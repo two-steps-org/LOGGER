@@ -1,10 +1,10 @@
 # twosteps_logger
 
-Refactored logger library with modular package structure, monthly Elasticsearch indexing, and uv-based CI/CD publishing.
+A structured logging library for Python that ships logs to Elasticsearch with automatic monthly index rotation, JSON formatting, and async-safe request context propagation.
 
-## Target Structure (implemented in `twosteps_logger/`)
+## Package Structure
 
-```text
+```
 twosteps_logger/
 ├── __init__.py
 ├── configuration/
@@ -21,174 +21,187 @@ twosteps_logger/
     └── elastic.handler.py
 ```
 
-CI/CD workflow lives at repository path: `.github/workflows/publish.yml`.
+CI/CD workflow: `.github/workflows/publish.yml`
 
-## Install from private PyPI (consumer app)
+---
+
+## Install from private PyPI
 
 ```toml
+# pyproject.toml (consumer app)
 [tool.uv.sources]
 twosteps_logger = { index = "twosteps-pypi" }
 
 [project]
-dependencies = [
-  "twosteps_logger>=1.0.0"
-]
+dependencies = ["twosteps_logger>=1.0.0"]
 ```
+
+---
 
 ## Usage
 
-```python
-from twosteps_logger import twosteps_logger, get_additional, StatusType
+### Recommended: configure once, log everywhere
 
-logger = twosteps_logger(__name__)
-
-extra_fields = get_additional(
-    status=StatusType.SUCCESS
-)
-
-logger.info("done", extra=extra_fields)
-```
-
-All logger internals (ES client, index routing, context enrichment, JSON formatting) are handled during initialization.
-
-### Configure once, then get logger by name
+Call `setup_logger` once at application startup (e.g. `main.py` or `app/__init__.py`).  
+All Elasticsearch connection details are read from environment variables and the config set here.
 
 ```python
-import logging
-from twosteps_logger import get_logger, setup_logger
+# main.py / app startup
+from twosteps_logger import setup_logger
 
 setup_logger(
-    level=logging.DEBUG,
-    index_prefix="benchmark",
-    service="demo-api",
-    environment="development",
+    index_prefix="benchmark",   # becomes benchmark-MM_YY index names
+    service="my-api",
+    environment="production",   # or read from ENV
 )
-logger = get_logger(__name__)
 ```
 
-## Extra fields and context
+Then in every module, just get a logger by name:
 
-`get_additional()` supports:
+```python
+# any module
+from twosteps_logger import get_logger
 
-- Core fields: `status`, `message`, `timestamp`, `service`, `environment`
-- Global request context: `request_id`, `method`, `endpoint`, `duration_ms`, `status_code`
-- Auth context: `email`, `name`, `user_id`, `session_id`, `ip_address`
-- Error context: `error_code`, `error_type`, `error_message`, `http_status`, `stack_error`
-- `custom_fields`: any additional data
+logger = get_logger(__name__)
+logger.info("request handled")
+```
 
-### Status enum
+### Zero-config quick start
+
+If you have not called `setup_logger`, the logger resolves all settings from environment variables:
+
+```python
+from twosteps_logger import twosteps_logger
+
+logger = twosteps_logger(__name__)
+logger.info("ready")
+```
+
+### StatusType enum
 
 ```python
 from twosteps_logger import StatusType
 
-StatusType.SUCCESS
-StatusType.FAILURE
-StatusType.PENDING
-StatusType.ERROR
+StatusType.SUCCESS   # "SUCCESS"
+StatusType.FAILURE   # "FAILURE"
+StatusType.PENDING   # "PENDING"
+StatusType.ERROR     # "ERROR"
 ```
 
-## Elasticsearch template and monthly index
+### Request context (async-safe)
 
-Create template before sending logs (default prefix: `benchmark`):
+Use `set_request_context` / `clear_request_context` in middleware to propagate per-request metadata
+into every log record automatically (uses `contextvars.ContextVar`):
+
+```python
+from twosteps_logger import set_request_context, clear_request_context
+
+# FastAPI / Starlette middleware example
+async def logging_middleware(request, call_next):
+    set_request_context(
+        request_id=request.headers.get("X-Request-ID"),
+        method=request.method,
+        endpoint=str(request.url.path),
+    )
+    response = await call_next(request)
+    clear_request_context()
+    return response
+```
+
+### Building structured extra fields (`get_additional`)
+
+> **Note:** `get_additional` is provided as a convenience helper. Teams that need project-specific
+> extra field shapes should build their own helper instead of relying on this one.
+
+```python
+from twosteps_logger import get_logger, get_additional, StatusType
+
+logger = get_logger(__name__)
+
+extra = get_additional(
+    status=StatusType.SUCCESS,
+    custom_fields={"action": "checkout", "order_id": "ord-123"},
+)
+logger.info("order completed", extra=extra)
+```
+
+`get_additional` merges:
+- **Core fields**: `status`, `message`, `timestamp`, `service`, `environment`
+- **Request context**: any values set via `set_request_context`
+- **Auth context** (optional `auth` dict): `email`, `name`, `user_id`, `session_id`, `ip_address`
+- **Error context** (optional `error` dict): `error_code`, `error_type`, `error_message`, `http_status`
+- **Custom fields** (optional): nested under `custom_fields` in the ES document
+
+---
+
+## Elasticsearch — index template & monthly indexes
+
+### Index template
+
+The handler automatically creates an index template on startup (one HTTP call per prefix per process).
+You can also run the script once manually:
 
 ```bash
 python scripts/create_es_template.py --prefix benchmark
 ```
 
-Template pattern: `benchmark-*`
+Template covers the `benchmark-*` pattern with the required field mappings:
 
-Monthly index naming:
+| Field         | ES type   |
+|---------------|-----------|
+| `severity`    | `keyword` |
+| `message`     | `text`    |
+| `timestamp`   | `date`    |
+| `service`     | `keyword` |
+| `environment` | `keyword` |
+| `status`      | `keyword` |
 
-- March 2026 -> `benchmark-03_26`
-- April 2026 -> `benchmark-04_26`
-- February 2026 -> `benchmark-02_26`
+### Monthly index naming
 
-`elastic.handler.py` resolves current index dynamically at log time.
+Indexes are named `{prefix}-MM_YY`, resolved at log-flush time:
+
+| Month          | Index name         |
+|----------------|--------------------|
+| March 2026     | `benchmark-03_26`  |
+| April 2026     | `benchmark-04_26`  |
+| February 2026  | `benchmark-02_26`  |
+
+### Environment variables
+
+| Variable        | Default       | Description              |
+|-----------------|---------------|--------------------------|
+| `ELASTIC_HOST`  | `localhost`   | Elasticsearch hostname   |
+| `ELASTIC_PORT`  | `9200`        | Elasticsearch port       |
+| `ELASTIC_SCHEME`| `http`        | `http` or `https`        |
+
+For local development no configuration is needed. For other environments, set these variables.
+
+---
 
 ## Local setup
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
 ```
 
-## Demo run (FastAPI logger test app)
+## Running tests
 
 ```bash
-uvicorn app:app --app-dir twosteps_logger-test --reload
-```
-
-## Standalone logger test script
-
-```bash
-python twosteps-logger.test-file.py
-```
-
-## Testing guide
-
-1) Start services:
-
-```bash
-docker start elasticsearch
-docker start kibana
-curl http://localhost:9200
-```
-
-2) Create template:
-
-```bash
-python scripts/create_es_template.py --prefix twosteps-project-logs
-```
-
-3) Generate demo logs:
-
-```bash
-curl http://localhost:8000/
-curl http://localhost:8000/health
-curl http://localhost:8000/users/1
-curl http://localhost:8000/debug
-curl http://localhost:8000/warning
-curl -i http://localhost:8000/error
-curl -i http://localhost:8000/critical
-curl -i http://localhost:8000/exception
-```
-
-4) Verify in Elasticsearch:
-
-```bash
-curl "http://localhost:9200/_cat/indices/twosteps-project-logs*?v"
-curl "http://localhost:9200/twosteps-project-logs-03_26/_search?pretty"
-```
-
-5) Kibana:
-
-- Data view: `twosteps-project-logs*`
-- Time field: `@timestamp`
-- Time range: Last 15 minutes / Last 24 hours
-
-6) Unit tests:
-
-```bash
-pytest -q
+pytest
+# or with coverage report:
 pytest --cov=twosteps_logger --cov-report=term-missing
 ```
 
-Coverage threshold is enforced in project config with `--cov-fail-under=80`.
+Coverage threshold is enforced at 80% (currently ~95%).
 
-## CI/CD (GitHub Actions + uv)
+---
+
+## CI/CD — GitHub Actions + uv
 
 Workflow: `.github/workflows/publish.yml`
 
-Build and publish:
+- **verify** job: runs on every PR and push to `main` — installs with `uv sync`, compiles, runs tests.
+- **publish** job: runs only on `v*` tags — builds with `uv build`, publishes with `uv publish --index twosteps-pypi`.
 
-```bash
-uv build
-uv publish --index twosteps-pypi
-```
-
-Required secrets:
-
-- `TWOSTEPS_PYPI_USERNAME`
-- `TWOSTEPS_PYPI_PASSWORD`
-
+Required GitHub secrets: `TWOSTEPS_PYPI_USERNAME`, `TWOSTEPS_PYPI_PASSWORD`.

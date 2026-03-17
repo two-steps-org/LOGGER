@@ -42,6 +42,10 @@ SKIP_KEYS: Set[str] = {
     "threadName",
     "message",
     "taskName",
+    # Already emitted at document root — exclude from custom_fields
+    "status",
+    "service",
+    "environment",
 } | AUTH_KEYS | REQUEST_CONTEXT_KEYS | ERROR_KEYS
 
 
@@ -138,10 +142,16 @@ class JsonFormatter(logging.Formatter):
         return getattr(record, "stack_error", None)
 
     def _extract_custom_fields(self, record: logging.LogRecord) -> Dict[str, Any] | None:
+        # If the caller set a structured custom_fields dict (via get_additional), use it directly
+        # to avoid double-nesting it under another custom_fields key.
+        explicit = getattr(record, "custom_fields", None)
+        if isinstance(explicit, dict):
+            return explicit or None
+
         out = {}
         for key, value in record.__dict__.items():
             if key not in SKIP_KEYS and value is not None:
-                if key in ("auth", "request_context"):
+                if key in ("auth", "request_context", "custom_fields"):
                     continue
                 out[key] = value
         return out or None

@@ -25,26 +25,25 @@ def main():
     template_name = f"{args.prefix}-template"
     index_pattern = [f"{args.prefix}-*"]
 
-    body = {
-        "index_patterns": index_pattern,
-        "priority": args.priority,
-        "template": {
-            "settings": {"number_of_shards": 1},
-            "mappings": {
-                "properties": {
-                    "severity": {"type": "keyword"},
-                    "message": {"type": "text"},
-                    "timestamp": {"type": "date"},
-                    "service": {"type": "keyword"},
-                    "environment": {"type": "keyword"},
-                    "status": {"type": "keyword"},
-                }
-            },
-        },
-    }
-
     try:
-        client.indices.put_index_template(name=template_name, body=body)
+        client.indices.put_index_template(
+            name=template_name,
+            index_patterns=index_pattern,
+            priority=args.priority,
+            template={
+                "settings": {"number_of_shards": 1},
+                "mappings": {
+                    "properties": {
+                        "severity": {"type": "keyword"},
+                        "message": {"type": "text"},
+                        "timestamp": {"type": "date"},
+                        "service": {"type": "keyword"},
+                        "environment": {"type": "keyword"},
+                        "status": {"type": "keyword"},
+                    }
+                },
+            },
+        )
         print(f"Template '{template_name}' created successfully.")
         print(f"Logger should use index_pattern='{args.prefix}-{{month}}' (e.g. {args.prefix}-03_26 for March 2026)")
     except Exception as e:

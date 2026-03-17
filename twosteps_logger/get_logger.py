@@ -6,11 +6,15 @@ from typing import Any, Dict, Optional
 from .constants import StatusType
 from .configuration import get_logger_configuration
 
+# Per-request async-safe context (correctly uses ContextVar)
 _request_context: ContextVar[Dict[str, Any]] = ContextVar("request_context", default={})
 _default_meta: ContextVar[Dict[str, str]] = ContextVar(
     "default_meta", default={"service": "api", "environment": "development"}
 )
-_logger_defaults: ContextVar[Dict[str, Any]] = ContextVar("logger_defaults", default={})
+
+# Process-level startup config — plain dict, not ContextVar
+# (setup_logger is called once at startup; ContextVar would isolate it to one coroutine's context)
+_logger_defaults: Dict[str, Any] = {}
 
 
 def set_request_context(**kwargs: Any) -> None:
@@ -38,28 +42,25 @@ def setup_logger(
     bulk_size: Optional[int] = None,
 ) -> None:
     """Set process-level defaults so callers can use get_logger(name) only."""
-    defaults = dict(_logger_defaults.get())
     resolved_index = index_prefix or index_name
     resolved_service = service or service_name
     resolved_level = level if level is not None else logger_level
     resolved_hosts = elastic_hosts if elastic_hosts is not None else hosts
 
     if resolved_index is not None:
-        defaults["index_prefix"] = resolved_index
+        _logger_defaults["index_prefix"] = resolved_index
     if resolved_service is not None:
-        defaults["service"] = resolved_service
+        _logger_defaults["service"] = resolved_service
     if environment is not None:
-        defaults["environment"] = environment
+        _logger_defaults["environment"] = environment
     if resolved_level is not None:
-        defaults["level"] = resolved_level
+        _logger_defaults["level"] = resolved_level
     if resolved_hosts is not None:
-        defaults["elastic_hosts"] = resolved_hosts
+        _logger_defaults["elastic_hosts"] = resolved_hosts
     if flush_interval is not None:
-        defaults["flush_interval"] = flush_interval
+        _logger_defaults["flush_interval"] = flush_interval
     if bulk_size is not None:
-        defaults["bulk_size"] = bulk_size
-
-    _logger_defaults.set(defaults)
+        _logger_defaults["bulk_size"] = bulk_size
 
 
 def get_additional(
@@ -93,7 +94,7 @@ def get_additional(
 
 def twosteps_logger(name: str, **kwargs: Any) -> logging.Logger:
     from . import CustomLogger
-    defaults = _logger_defaults.get()
+    defaults = _logger_defaults
     resolved_level = kwargs.get(
         "level",
         kwargs.get("logger_level", defaults.get("level", logging.INFO)),
