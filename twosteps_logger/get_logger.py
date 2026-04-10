@@ -43,6 +43,10 @@ def setup_logger(
     bulk_size: Optional[int] = None,
     username: Optional[str] = None,
     password: Optional[str] = None,
+    logger_transport: Optional[str] = None,
+    otlp_endpoint: Optional[str] = None,
+    otlp_protocol: Optional[str] = None,
+    otlp_insecure: Optional[bool] = None,
 ) -> None:
     """Set process-level defaults so callers can use get_logger(name) only."""
     resolved_index = index_prefix or index_name
@@ -68,6 +72,14 @@ def setup_logger(
         _logger_defaults["username"] = username
     if password is not None:
         _logger_defaults["password"] = password
+    if logger_transport is not None:
+        _logger_defaults["logger_transport"] = logger_transport
+    if otlp_endpoint is not None:
+        _logger_defaults["otlp_endpoint"] = otlp_endpoint
+    if otlp_protocol is not None:
+        _logger_defaults["otlp_protocol"] = otlp_protocol
+    if otlp_insecure is not None:
+        _logger_defaults["otlp_insecure"] = otlp_insecure
 
 
 def get_additional(
@@ -123,6 +135,10 @@ def twosteps_logger(name: str, **kwargs: Any) -> logging.Logger:
     resolved_bulk_size = kwargs.get("bulk_size", defaults.get("bulk_size", 100))
     resolved_username = kwargs.get("username", defaults.get("username", os.getenv("ELASTIC_USERNAME")))
     resolved_password = kwargs.get("password", defaults.get("password", os.getenv("ELASTIC_PASSWORD")))
+    resolved_transport = kwargs.get("logger_transport", defaults.get("logger_transport"))
+    resolved_otlp_endpoint = kwargs.get("otlp_endpoint", defaults.get("otlp_endpoint"))
+    resolved_otlp_protocol = kwargs.get("otlp_protocol", defaults.get("otlp_protocol"))
+    resolved_otlp_insecure = kwargs.get("otlp_insecure", defaults.get("otlp_insecure"))
 
 
     config = get_logger_configuration(
@@ -150,6 +166,14 @@ def twosteps_logger(name: str, **kwargs: Any) -> logging.Logger:
     kwargs.setdefault("bulk_size", config.bulk_size)
     kwargs.setdefault("username", resolved_username)
     kwargs.setdefault("password", resolved_password)
+    if resolved_transport is not None:
+        kwargs.setdefault("logger_transport", resolved_transport)
+    if resolved_otlp_endpoint is not None:
+        kwargs.setdefault("otlp_endpoint", resolved_otlp_endpoint)
+    if resolved_otlp_protocol is not None:
+        kwargs.setdefault("otlp_protocol", resolved_otlp_protocol)
+    if resolved_otlp_insecure is not None:
+        kwargs.setdefault("otlp_insecure", resolved_otlp_insecure)
 
     _default_meta.set(
         {

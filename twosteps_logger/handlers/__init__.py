@@ -13,6 +13,7 @@ sys.modules[_HANDLER_MODULE_NAME] = _module
 _spec.loader.exec_module(_module)
 
 ElasticsearchHandler = _module.ElasticsearchHandler
+from .otel_handler import OTelHandler
 
-__all__ = ["ElasticsearchHandler"]
+__all__ = ["ElasticsearchHandler", "OTelHandler"]
 

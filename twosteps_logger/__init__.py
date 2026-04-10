@@ -78,6 +78,7 @@ class CustomLogger(logging.Logger):
         **kwargs,
     ):
         super().__init__(name, level)
+        transport = str(kwargs.pop("logger_transport", kwargs.pop("transport", os.getenv("LOGGER_TRANSPORT", "elastic")))).lower()
 
         if console:
             h = logging.StreamHandler(sys.stdout)
@@ -93,17 +94,31 @@ class CustomLogger(logging.Logger):
                 kwargs["username"] = env_user
             if env_pass:
                 kwargs["password"] = env_pass
-        es_handler = ElasticsearchHandler(
-            hosts=resolved_hosts,
-            index_name=index_name,
-            index_pattern=pattern,
-            service_name=service_name,
-            project_name=proj,
-            environment=environment,
-            **kwargs,
-        )
-        es_handler.setFormatter(JsonFormatter())
-        self.addHandler(es_handler)
+        if transport in {"otel", "otlp"}:
+            from .handlers.otel_handler import OTelHandler
+
+            otel_handler = OTelHandler(
+                service_name=service_name,
+                environment=environment,
+                index_name=index_name,
+                level=level,
+                **kwargs,
+            )
+            # Keep structured JSON string output in OTEL body as well.
+            otel_handler.setFormatter(JsonFormatter())
+            self.addHandler(otel_handler)
+        else:
+            es_handler = ElasticsearchHandler(
+                hosts=resolved_hosts,
+                index_name=index_name,
+                index_pattern=pattern,
+                service_name=service_name,
+                project_name=proj,
+                environment=environment,
+                **kwargs,
+            )
+            es_handler.setFormatter(JsonFormatter())
+            self.addHandler(es_handler)
 
     @staticmethod
     def _default_hosts_for_env(environment: str) -> List[Dict[str, Any]]:
