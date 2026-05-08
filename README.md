@@ -24,6 +24,110 @@ dependencies = ["twosteps_logger>=1.0.0"]
 
 ## Usage
 
+## Quick Start (Recommended)
+
+### 1) Install library
+
+Local development from this repo:
+
+```bash
+cd /home/saud/ESS/github/twosteps/logger
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+From git tag in another project:
+
+```bash
+uv add "twosteps_logger @ git+https://github.com/two-steps-org/LOGGER.git@v1.0.1"
+```
+
+### 2) Configure once at app startup
+
+```python
+import logging
+from twosteps_logger import setup_logger
+
+setup_logger(
+    level=logging.DEBUG,
+    index_prefix="my-project-logs",
+    service="my-project-api",
+    environment="development",
+    logger_transport="otel",
+)
+```
+
+### 3) Use anywhere in project
+
+```python
+from twosteps_logger import get_logger, get_additional, StatusType
+
+logger = get_logger(__name__)
+logger.info("service started", extra=get_additional(status=StatusType.SUCCESS))
+```
+
+### 4) Use a single env profile at a time
+
+Create these files in project root:
+- `.env.local` (local OTEL testing)
+- `.env.client` (client/deployed OTEL endpoint)
+
+Do not mix both profiles in one file.
+
+`.env.local`:
+
+```bash
+export LOGGER_TRANSPORT=otel
+export OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+export OTEL_SERVICE_NAME=twosteps-local-test
+export LOGGER_INDEX_PREFIX=my-project-logs
+export LOGGER_SERVICE_NAME=my-project-api
+export LOGGER_ENVIRONMENT=development
+```
+
+`.env.client`:
+
+```bash
+export LOGGER_TRANSPORT=otel
+export OTEL_LOGS_EXPORTER=otlp
+export OTEL_METRICS_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.shayb-vps.cloud
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <base64-token>"
+export OTEL_SERVICE_NAME=claude-code
+export OTEL_RESOURCE_ATTRIBUTES="environment=mac,host.name=shay-macbook-pro"
+export LOGGER_INDEX_PREFIX=my-project-logs
+export LOGGER_SERVICE_NAME=my-project-api
+export LOGGER_ENVIRONMENT=development
+```
+
+Run with one profile:
+
+```bash
+source .venv/bin/activate
+unset LOGGER_TRANSPORT OTEL_LOGS_EXPORTER OTEL_METRICS_EXPORTER OTEL_EXPORTER_OTLP_PROTOCOL OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_HEADERS OTEL_SERVICE_NAME OTEL_RESOURCE_ATTRIBUTES ELASTIC_HOST ELASTIC_PORT ELASTIC_SCHEME
+source .env.local   # or: source .env.client
+python thirteen_logger.py
+```
+
+### 5) Verify logs
+
+Local collector mode:
+
+```bash
+docker logs --since 2m otel-collector
+curl -s "http://localhost:9200/claude-code-logs/_search?size=5&sort=@timestamp:desc&pretty"
+```
+
+Kibana:
+- Open `http://localhost:5601`
+- Data view: `claude-code-logs*`
+- KQL filter example: `attributes.service : "thirteen-logger-test"`
+
+---
+
 ### Recommended: configure once, log everywhere
 
 Call `setup_logger` once at application startup (e.g. `main.py` or `app/__init__.py`).  
@@ -80,9 +184,13 @@ To route logs through OpenTelemetry Collector instead, set:
 
 ```bash
 export LOGGER_TRANSPORT=otel
-export OTEL_EXPORTER_OTLP_PROTOCOL=grpc
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+export OTEL_LOGS_EXPORTER=otlp
+export OTEL_METRICS_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.shayb-vps.cloud
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <base64-token>"
 export OTEL_SERVICE_NAME=my-api
+export OTEL_RESOURCE_ATTRIBUTES="environment=development,host.name=my-host"
 ```
 
 Or configure once in code:
@@ -93,8 +201,9 @@ setup_logger(
     service="my-api",
     environment="development",
     logger_transport="otel",
-    otlp_protocol="grpc",                  # or "http/protobuf"
-    otlp_endpoint="http://localhost:4317", # use 4318 for http/protobuf
+    otlp_protocol="http/protobuf",           # or "grpc"
+    otlp_endpoint="https://otel.shayb-vps.cloud",  # /v1/logs is auto-appended for HTTP mode
+    otlp_headers="Authorization=Basic <base64-token>",
 )
 ```
 
@@ -108,6 +217,14 @@ export ELASTIC_SCHEME=http
 ```
 
 Use this only when OTEL Collector is not available.
+
+If you are OTEL-only, you do not need these:
+
+```bash
+export ELASTIC_HOST=localhost
+export ELASTIC_PORT=9200
+export ELASTIC_SCHEME=http
+```
 
 ### Zero-config quick start
 
@@ -217,9 +334,13 @@ Indexes are named `{prefix}-MM_YY`, resolved at log-flush time:
 | `ELASTIC_PORT`  | `9200`        | Elasticsearch port       |
 | `ELASTIC_SCHEME`| `http`        | `http` or `https`        |
 | `LOGGER_TRANSPORT`| `elastic`   | `elastic` or `otel`      |
+| `OTEL_LOGS_EXPORTER` | (unset) | set `otlp` for OTEL logs |
+| `OTEL_METRICS_EXPORTER` | (unset) | optional, set `otlp` if needed |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` | `grpc` or `http/protobuf` |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` | Collector endpoint |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` | Collector endpoint/base URL |
+| `OTEL_EXPORTER_OTLP_HEADERS` | (unset) | e.g. `Authorization=Basic ...` |
 | `OTEL_SERVICE_NAME` | `service` value | OTEL resource service name |
+| `OTEL_RESOURCE_ATTRIBUTES` | (unset) | comma-separated `k=v` resource attrs |
 
 For local development no configuration is needed. For other environments, set these variables.
 
@@ -343,9 +464,12 @@ logger.info("ready", extra=get_additional(status=StatusType.SUCCESS))
 
 ```bash
 export LOGGER_TRANSPORT=otel
-export OTEL_EXPORTER_OTLP_PROTOCOL=grpc
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+export OTEL_LOGS_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.shayb-vps.cloud
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <base64-token>"
 export OTEL_SERVICE_NAME=my-project-api
+export OTEL_RESOURCE_ATTRIBUTES="environment=development,host.name=my-host"
 ```
 
 If you also want a direct Elasticsearch fallback profile for consumer projects:

@@ -47,6 +47,7 @@ def setup_logger(
     otlp_endpoint: Optional[str] = None,
     otlp_protocol: Optional[str] = None,
     otlp_insecure: Optional[bool] = None,
+    otlp_headers: Optional[str] = None,
 ) -> None:
     """Set process-level defaults so callers can use get_logger(name) only."""
     resolved_index = index_prefix or index_name
@@ -80,6 +81,8 @@ def setup_logger(
         _logger_defaults["otlp_protocol"] = otlp_protocol
     if otlp_insecure is not None:
         _logger_defaults["otlp_insecure"] = otlp_insecure
+    if otlp_headers is not None:
+        _logger_defaults["otlp_headers"] = otlp_headers
 
 
 def get_additional(
@@ -139,6 +142,7 @@ def twosteps_logger(name: str, **kwargs: Any) -> logging.Logger:
     resolved_otlp_endpoint = kwargs.get("otlp_endpoint", defaults.get("otlp_endpoint"))
     resolved_otlp_protocol = kwargs.get("otlp_protocol", defaults.get("otlp_protocol"))
     resolved_otlp_insecure = kwargs.get("otlp_insecure", defaults.get("otlp_insecure"))
+    resolved_otlp_headers = kwargs.get("otlp_headers", defaults.get("otlp_headers"))
 
 
     config = get_logger_configuration(
@@ -174,6 +178,8 @@ def twosteps_logger(name: str, **kwargs: Any) -> logging.Logger:
         kwargs.setdefault("otlp_protocol", resolved_otlp_protocol)
     if resolved_otlp_insecure is not None:
         kwargs.setdefault("otlp_insecure", resolved_otlp_insecure)
+    if resolved_otlp_headers is not None:
+        kwargs.setdefault("otlp_headers", resolved_otlp_headers)
 
     _default_meta.set(
         {
