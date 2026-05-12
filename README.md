@@ -419,13 +419,6 @@ curl -s "http://localhost:9200/claude-code-logs/_search?size=5&sort=@timestamp:d
   - `attributes.service : "tenth-logger-test"`
   - or `resource.attributes.logger.index_prefix : "tenth-logger-test"`
 
-If needed, create dashboard/data view with:
-
-```bash
-cd /home/saud/ESS/github/twosteps/logger/logs-elastic
-python3 create-dashboard.py
-```
-
 ---
 
 ## Testing this logger in another project

@@ -78,39 +78,14 @@ OTEL_SERVICE_NAME=claude-code
 
 Close and reopen all Claude Code sessions so the new environment variables take effect.
 
-### 4. Create the dashboard
+### 4. Open Kibana Discover
 
-After Kibana is healthy (the script waits automatically):
+After Kibana is healthy:
 
-```bash
-python3 create-dashboard.py
-```
-
-Output:
-
-```
-Waiting for Kibana at http://localhost:5601 ...
-  Kibana is ready.
-
-Setting up index pattern...
-  Created index pattern: claude-code-logs-*
-
-Creating visualizations...
-  [ok] [Claude] Total Cost
-  [ok] [Claude] Model Usage
-  [ok] [Claude] Cost by Model
-  [ok] [Claude] Tool Usage
-  [ok] [Claude] Cost per Session
-
-Creating dashboard...
-
-Dashboard created: claude-code-cost-usage
-  Open: http://localhost:5601/app/dashboards#/view/claude-code-cost-usage
-```
-
-### 5. Open the dashboard
-
-Go to **http://localhost:5601/app/dashboards#/view/claude-code-cost-usage**
+- Open `http://localhost:5601`
+- Go to **Discover**
+- Select data view `claude-code-logs*`
+- Set time range (for example, last 15 minutes)
 
 ---
 
@@ -195,13 +170,9 @@ docker compose down -v
 
 Increase Docker Desktop memory to at least **4 GB** (Docker Desktop > Settings > Resources).
 
-### Re-run the dashboard script
+### Re-check logs in Discover
 
-The script is idempotent — safe to re-run anytime:
-
-```bash
-python3 create-dashboard.py
-```
+Refresh Kibana Discover and verify new records in `claude-code-logs*`.
 
 ---
 

@@ -24,7 +24,6 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "elasticsearch>=8.0.0,<9.0.0",
     "opentelemetry-sdk>=1.24.0",
     "opentelemetry-exporter-otlp-proto-grpc>=1.24.0",
     "opentelemetry-exporter-otlp-proto-http>=1.24.0"
