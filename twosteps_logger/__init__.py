@@ -14,7 +14,7 @@ from .get_logger import (
     clear_request_context,
 )
 
-__version__ = "1.0.0"
+__version__ = "1.0.2"
 __all__ = [
     "CustomLogger",
     "twosteps_logger",
