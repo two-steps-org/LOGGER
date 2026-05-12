@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "twosteps_logger"
-version = "1.0.1"
+version = "1.0.2"
 description = "Custom structured logger library for Elasticsearch with monthly indices"
 readme = "README.md"
 requires-python = ">=3.8"
