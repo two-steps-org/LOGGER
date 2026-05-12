@@ -22,4 +22,3 @@ def get_logger_configuration(**overrides: Any) -> LoggerConfiguration:
         if hasattr(cfg, key):
             setattr(cfg, key, value)
     return cfg
-
