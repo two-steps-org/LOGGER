@@ -48,6 +48,9 @@ def setup_logger(
     otlp_protocol: Optional[str] = None,
     otlp_insecure: Optional[bool] = None,
     otlp_headers: Optional[str] = None,
+    posthog_api_key: Optional[str] = None,
+    posthog_host: Optional[str] = None,
+    handlers: Optional[Any] = None,
 ) -> None:
     """Set process-level defaults so callers can use get_logger(name) only."""
     resolved_index = index_prefix or index_name
@@ -83,6 +86,12 @@ def setup_logger(
         _logger_defaults["otlp_insecure"] = otlp_insecure
     if otlp_headers is not None:
         _logger_defaults["otlp_headers"] = otlp_headers
+    if posthog_api_key is not None:
+        _logger_defaults["posthog_api_key"] = posthog_api_key
+    if posthog_host is not None:
+        _logger_defaults["posthog_host"] = posthog_host
+    if handlers is not None:
+        _logger_defaults["handlers"] = handlers
 
 
 def get_additional(
@@ -143,7 +152,12 @@ def twosteps_logger(name: str, **kwargs: Any) -> logging.Logger:
     resolved_otlp_protocol = kwargs.get("otlp_protocol", defaults.get("otlp_protocol"))
     resolved_otlp_insecure = kwargs.get("otlp_insecure", defaults.get("otlp_insecure"))
     resolved_otlp_headers = kwargs.get("otlp_headers", defaults.get("otlp_headers"))
-
+    resolved_posthog_api_key = kwargs.get(
+        "posthog_api_key", defaults.get("posthog_api_key", os.getenv("POSTHOG_API_KEY"))
+    )
+    resolved_posthog_host = kwargs.get(
+        "posthog_host", defaults.get("posthog_host", os.getenv("POSTHOG_HOST"))
+    )
 
     config = get_logger_configuration(
         index_prefix=resolved_index_prefix,
@@ -180,6 +194,15 @@ def twosteps_logger(name: str, **kwargs: Any) -> logging.Logger:
         kwargs.setdefault("otlp_insecure", resolved_otlp_insecure)
     if resolved_otlp_headers is not None:
         kwargs.setdefault("otlp_headers", resolved_otlp_headers)
+    resolved_handlers = kwargs.get("handlers", defaults.get("handlers", os.getenv("LOGGER_HANDLERS")))
+    if isinstance(resolved_handlers, str):
+        resolved_handlers = resolved_handlers.split(",")
+    if resolved_handlers is not None:
+        kwargs["handlers"] = resolved_handlers
+    if resolved_posthog_api_key:
+        kwargs["posthog_api_key"] = resolved_posthog_api_key
+    if resolved_posthog_host:
+        kwargs["posthog_host"] = resolved_posthog_host
 
     _default_meta.set(
         {

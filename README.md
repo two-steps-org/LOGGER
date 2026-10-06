@@ -207,6 +207,47 @@ setup_logger(
 )
 ```
 
+### PostHog logs (optional second destination)
+
+Logs can also be shipped to PostHog in addition to the OTEL pipeline. It is off unless an API key is provided.
+
+```python
+from twosteps_logger import setup_logger, get_logger
+
+setup_logger(
+    service="billing-api",
+    environment="production",
+    posthog_api_key="phc_xxx",
+    posthog_host="https://eu.i.posthog.com",  # optional, defaults to https://us.i.posthog.com
+)
+log = get_logger(__name__)
+```
+
+Env fallback when the arguments are not passed:
+
+```bash
+export POSTHOG_API_KEY=phc_xxx
+export POSTHOG_HOST=https://eu.i.posthog.com
+```
+
+- **Endpoint/auth:** records are sent over OTLP/HTTP to `{host}/i/v1/logs` with `Authorization: Bearer <api key>`.
+- **Levels:** INFO and above only; debug is never sent.
+- **Delivery:** export runs on a background thread with a 5 second timeout, so an unreachable PostHog never blocks the app. Failing to set up the handler prints one line to stderr and logging continues.
+- **Disabled:** nothing is sent when `OTEL_SDK_DISABLED=true`.
+- **Per-environment index:** the `index_prefix` passed to `setup_logger` is sent as the `logger.index_prefix` resource attribute (alongside `deployment.environment`), so each environment can use its own prefix, e.g. `phyizit-dev-logs` / `phyizit-prod-logs`.
+
+#### Choosing handlers per project
+
+By default OTel is always on and PostHog is added when a key is set. To pick explicitly, pass `handlers` (or set `LOGGER_HANDLERS=otel,posthog`):
+
+```python
+setup_logger(handlers=["otel", "posthog"], posthog_api_key="phc_xxx")  # both
+setup_logger(handlers=["otel"])                                         # OTel only
+setup_logger(handlers=["posthog"], posthog_api_key="phc_xxx")           # PostHog only
+```
+
+Known names are `otel` and `posthog`. Selecting `posthog` without a key, or an unknown name, prints one line to stderr and is skipped.
+
 ### Direct Elasticsearch mode (fallback)
 
 ```bash
